@@ -41,6 +41,8 @@ One tradeoff in my scheduler is that it uses a fairly simple approach to filling
 
 This is easy to understand and works well for a small pet-care application, but it does not always produce the theoretically optimal schedule. For example, a combination of several shorter tasks could sometimes use the available time better than one longer task. I chose the simpler approach because it makes the scheduler easier to understand and verify.
 
+Another tradeoff is in `Scheduler.detect_conflicts()`. It only flags tasks whose `preferred_time` values match exactly, rather than checking whether their durations actually overlap. For example, a 30-minute task starting at 08:00 and a 20-minute task starting at 08:10 clearly overlap, but since their start times differ, my scheduler would not flag them as a conflict. A more thorough version would convert each task into a start/end time range and check those ranges for overlap instead of comparing a single timestamp. I chose the exact-match approach because it is much simpler to implement and reason about, and it still catches the most obvious case for a pet owner: two tasks that are both scheduled to start at the same moment.
+
 ---
 
 ## 3. AI Collaboration

@@ -139,19 +139,33 @@ tests/test_pawpal.py ..                                                     [100
 
 ## 📐 Smarter Scheduling
 
-The scheduling system will be expanded during the algorithmic portion of the project.
+| Feature                    | Method                        | Current Status |
+| -------------------------- | ------------------------------ | --------------- |
+| Task collection            | `Owner.get_all_tasks()`        | Implemented      |
+| Basic schedule building     | `Scheduler.build_schedule()`   | Implemented      |
+| Completed-task filtering    | `Scheduler.build_schedule()`   | Implemented      |
+| Available-time constraint   | `Scheduler.build_schedule()`   | Implemented      |
+| Sorting by priority/time    | `Scheduler.build_schedule()`   | Implemented      |
+| Sorting by time only        | `Scheduler.sort_by_time()`     | Implemented      |
+| Filtering by pet/status     | `Scheduler.filter_tasks()`     | Implemented      |
+| Conflict detection          | `Scheduler.detect_conflicts()` | Implemented      |
+| Recurring tasks             | `Task.create_next_occurrence()`, `Pet.mark_task_complete()` | Implemented |
 
-| Feature                   | Method                       | Current Status       |
-| ------------------------- | ---------------------------- | -------------------- |
-| Task collection           | `Owner.get_all_tasks()`      | Implemented          |
-| Basic schedule building   | `Scheduler.build_schedule()` | Implemented          |
-| Completed-task filtering  | `Scheduler.build_schedule()` | Implemented          |
-| Available-time constraint | `Scheduler.build_schedule()` | Implemented          |
-| Task sorting              | `Scheduler.build_schedule()` | Basic implementation |
-| Conflict detection        | `Scheduler`                  | To be implemented    |
-| Recurring tasks           | `Task` / `Scheduler`         | To be implemented    |
+### Sorting
 
-The goal of the later scheduling work is to make the system smarter without making the code unnecessarily complicated.
+`Scheduler.sort_by_time()` returns tasks ordered by `preferred_time`, earliest first. Tasks with no preferred time are sorted to the end instead of the beginning, since they don't have an actual time slot. `Scheduler.build_schedule()` uses a similar, slightly richer sort: priority first (high before low), then preferred time.
+
+### Filtering
+
+`Scheduler.filter_tasks(pet_name=..., completed=...)` narrows the owner's tasks by pet name and/or completion status. Either filter can be omitted; with both omitted it returns every task. This is used, for example, to show only a specific pet's open tasks.
+
+### Recurring tasks
+
+A `Task` can carry a `recurrence` of `"daily"` or `"weekly"` plus a `due_date`. When `Pet.mark_task_complete(task_id)` is called, it marks the task complete and, if it recurs, calls `Task.create_next_occurrence()` to build a fresh, incomplete copy of the task with its `due_date` advanced by one day (daily) or seven days (weekly), then adds that copy back onto the pet automatically. One-off tasks (`recurrence=None`) are left alone.
+
+### Conflict detection
+
+`Scheduler.detect_conflicts()` groups the owner's incomplete tasks by `preferred_time` and returns a human-readable warning string for any time slot shared by two or more tasks, across any of the owner's pets. It returns an empty list when there are no conflicts and never raises, so a conflict never crashes the program. This is a lightweight, exact-time-match check — see `reflection.md` (section 2b) for the tradeoff versus true overlapping-duration detection.
 
 ## 📸 Demo Walkthrough
 

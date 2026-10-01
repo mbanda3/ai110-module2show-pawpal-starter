@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import time
+from datetime import date, time, timedelta
 from enum import IntEnum
 from typing import Dict, List, Optional
 
@@ -18,6 +18,11 @@ class Priority(IntEnum):
     LOW = 1
     MEDIUM = 2
     HIGH = 3
+
+
+# Recurrence values a Task accepts. Anything else (including None) is treated
+# as a one-off task that does not regenerate when completed.
+RECURRENCE_FREQUENCIES = ("daily", "weekly")
 
 
 @dataclass
@@ -31,6 +36,8 @@ class Task:
     task_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     preferred_time: Optional[time] = None
     completed: bool = False
+    recurrence: Optional[str] = None
+    due_date: Optional[date] = None
 
     def mark_complete(self) -> None:
         """Mark this task as completed."""
@@ -39,6 +46,30 @@ class Task:
     def mark_incomplete(self) -> None:
         """Mark this task as not completed."""
         self.completed = False
+
+    def create_next_occurrence(self) -> Optional["Task"]:
+        """Build the next occurrence of this task if it recurs.
+
+        Returns a new, incomplete `Task` with the same details and a
+        `due_date` moved forward by one day ("daily") or seven days
+        ("weekly"). Returns `None` for tasks with no recurrence, since
+        those shouldn't regenerate when completed.
+        """
+        if self.recurrence not in RECURRENCE_FREQUENCIES:
+            return None
+
+        base_date = self.due_date or date.today()
+        step = timedelta(days=1) if self.recurrence == "daily" else timedelta(days=7)
+
+        return Task(
+            title=self.title,
+            duration_minutes=self.duration_minutes,
+            priority=self.priority,
+            pet_id=self.pet_id,
+            preferred_time=self.preferred_time,
+            recurrence=self.recurrence,
+            due_date=base_date + step,
+        )
 
 
 @dataclass
@@ -64,6 +95,24 @@ class Pet:
     def get_tasks(self) -> List[Task]:
         """Return all tasks associated with this pet."""
         return self.tasks
+
+    def mark_task_complete(self, task_id: str) -> Optional[Task]:
+        """Mark one of this pet's tasks complete and handle recurrence.
+
+        If the completed task recurs ("daily"/"weekly"), its next occurrence
+        is created automatically and added to this pet's task list. Returns
+        the newly scheduled follow-up task, or `None` if the task wasn't
+        found or doesn't recur.
+        """
+        task = next((t for t in self.tasks if t.task_id == task_id), None)
+        if task is None:
+            return None
+
+        task.mark_complete()
+        next_task = task.create_next_occurrence()
+        if next_task is not None:
+            self.add_task(next_task)
+        return next_task
 
 
 @dataclass
@@ -99,6 +148,66 @@ class Scheduler:
     def __init__(self, owner: Owner, available_minutes: int = 480) -> None:
         self.owner = owner
         self.available_minutes = available_minutes
+
+    @staticmethod
+    def sort_by_time(tasks: List[Task]) -> List[Task]:
+        """Return `tasks` sorted by preferred time, earliest first.
+
+        Tasks with no preferred time are sorted to the end rather than
+        being treated as "earliest," since they have no actual time slot.
+        """
+        return sorted(
+            tasks,
+            key=lambda task: (task.preferred_time is None, task.preferred_time or time.min),
+        )
+
+    def filter_tasks(
+        self, *, pet_name: Optional[str] = None, completed: Optional[bool] = None
+    ) -> List[Task]:
+        """Return the owner's tasks narrowed by pet name and/or status.
+
+        Either filter can be left as `None` to skip it; with both omitted,
+        every task is returned.
+        """
+        tasks = self.owner.get_all_tasks()
+
+        if pet_name is not None:
+            pet_ids = {pet.pet_id for pet in self.owner.get_pets() if pet.name == pet_name}
+            tasks = [task for task in tasks if task.pet_id in pet_ids]
+
+        if completed is not None:
+            tasks = [task for task in tasks if task.completed == completed]
+
+        return tasks
+
+    def detect_conflicts(self) -> List[str]:
+        """Return warnings for tasks that share the same preferred time.
+
+        This is a lightweight check: it only flags an exact preferred_time
+        match, not overlapping durations (e.g. a 30-minute task starting at
+        08:00 and a 20-minute task starting at 08:10 won't be flagged even
+        though they overlap). Completed tasks and tasks with no preferred
+        time are skipped. Returns warning strings instead of raising, so a
+        conflict never crashes the program.
+        """
+        pet_names: Dict[str, str] = {pet.pet_id: pet.name for pet in self.owner.get_pets()}
+
+        tasks_by_time: Dict[time, List[Task]] = {}
+        for task in self.owner.get_all_tasks():
+            if task.completed or task.preferred_time is None:
+                continue
+            tasks_by_time.setdefault(task.preferred_time, []).append(task)
+
+        warnings: List[str] = []
+        for scheduled_time, tasks in sorted(tasks_by_time.items()):
+            if len(tasks) < 2:
+                continue
+            names = ", ".join(
+                f"{task.title} ({pet_names.get(task.pet_id, 'Unknown pet')})" for task in tasks
+            )
+            warnings.append(f"Conflict at {scheduled_time.strftime('%H:%M')}: {names}")
+
+        return warnings
 
     def build_schedule(self) -> List[Task]:
         """Choose and order tasks into a daily plan based on priority, preferred

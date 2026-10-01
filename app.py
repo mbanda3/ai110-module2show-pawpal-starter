@@ -78,8 +78,9 @@ if owner.get_pets():
         with col2:
             priority_label = st.selectbox("Priority", ["low", "medium", "high"], index=2, key="task_priority")
         with col3:
-            has_preferred_time = st.checkbox("Set preferred time?", key="task_has_time")
+            recurrence_label = st.selectbox("Repeats", ["never", "daily", "weekly"], key="task_recurrence")
 
+        has_preferred_time = st.checkbox("Set preferred time?", key="task_has_time")
         preferred_time = None
         if has_preferred_time:
             preferred_time = st.time_input("Preferred time", value=dt_time(8, 0), key="task_time")
@@ -92,6 +93,7 @@ if owner.get_pets():
                 priority=Priority[priority_label.upper()],
                 pet_id=pet.pet_id,
                 preferred_time=preferred_time,
+                recurrence=None if recurrence_label == "never" else recurrence_label,
             )
             pet.add_task(task)
 else:
@@ -109,11 +111,15 @@ if owner.get_all_tasks():
                 label = f"{task.title} — {task.duration_minutes} min, {task.priority.name}"
                 if task.preferred_time:
                     label += f", {task.preferred_time.strftime('%H:%M')}"
+                if task.recurrence:
+                    label += f", repeats {task.recurrence}"
                 st.write(label)
             with done_col:
                 is_done = st.checkbox("Done", value=task.completed, key=f"done_{task.task_id}")
-                if is_done != task.completed:
-                    task.mark_complete() if is_done else task.mark_incomplete()
+                if is_done and not task.completed:
+                    pet.mark_task_complete(task.task_id)
+                elif not is_done and task.completed:
+                    task.mark_incomplete()
 else:
     st.info("No tasks yet. Add one above.")
 
@@ -128,3 +134,6 @@ if st.button("Generate schedule"):
     scheduler = Scheduler(owner=owner, available_minutes=int(available_minutes))
     schedule = scheduler.build_schedule()
     st.code(scheduler.explain_plan(schedule))
+
+    for warning in scheduler.detect_conflicts():
+        st.warning(warning)
