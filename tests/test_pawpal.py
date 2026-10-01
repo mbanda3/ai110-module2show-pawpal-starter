@@ -106,3 +106,71 @@ def test_detect_conflicts_flags_tasks_at_the_same_preferred_time():
     assert "08:00" in conflicts[0]
     assert "Morning walk" in conflicts[0]
     assert "Vet checkup" in conflicts[0]
+
+
+def test_detect_conflicts_ignores_completed_tasks():
+    owner = Owner(name="Jordan")
+    mochi = Pet(name="Mochi", species="dog", owner_id=owner.owner_id)
+    owner.add_pet(mochi)
+
+    first = Task(title="Morning walk", duration_minutes=30, priority=Priority.HIGH, pet_id=mochi.pet_id, preferred_time=time(8, 0))
+    second = Task(title="Brushing", duration_minutes=5, priority=Priority.LOW, pet_id=mochi.pet_id, preferred_time=time(8, 0))
+    first.mark_complete()
+    mochi.add_task(first)
+    mochi.add_task(second)
+
+    scheduler = Scheduler(owner=owner)
+
+    assert scheduler.detect_conflicts() == []
+
+
+def test_owner_with_no_pets_has_no_tasks_and_no_conflicts():
+    owner = Owner(name="Jordan")
+    scheduler = Scheduler(owner=owner)
+
+    assert owner.get_all_tasks() == []
+    assert scheduler.build_schedule() == []
+    assert scheduler.detect_conflicts() == []
+
+
+def test_pet_with_no_tasks_is_excluded_from_schedule():
+    owner = Owner(name="Jordan")
+    mochi = Pet(name="Mochi", species="dog", owner_id=owner.owner_id)
+    owner.add_pet(mochi)
+
+    scheduler = Scheduler(owner=owner)
+
+    assert scheduler.build_schedule() == []
+    assert scheduler.explain_plan(scheduler.build_schedule()) == "No tasks were scheduled."
+
+
+def test_mark_task_complete_schedules_next_occurrence_for_weekly_task():
+    pet = Pet(name="Mochi", species="dog", owner_id="owner-1")
+    task = Task(
+        title="Grooming",
+        duration_minutes=45,
+        priority=Priority.MEDIUM,
+        pet_id=pet.pet_id,
+        recurrence="weekly",
+        due_date=date(2026, 1, 1),
+    )
+    pet.add_task(task)
+
+    next_task = pet.mark_task_complete(task.task_id)
+
+    assert next_task is not None
+    assert next_task.due_date == date(2026, 1, 1) + timedelta(days=7)
+
+
+def test_build_schedule_stops_once_available_time_is_used():
+    owner = Owner(name="Jordan")
+    pet = Pet(name="Mochi", species="dog", owner_id=owner.owner_id)
+    owner.add_pet(pet)
+
+    pet.add_task(Task(title="Long walk", duration_minutes=40, priority=Priority.HIGH, pet_id=pet.pet_id))
+    pet.add_task(Task(title="Short brushing", duration_minutes=10, priority=Priority.LOW, pet_id=pet.pet_id))
+
+    scheduler = Scheduler(owner=owner, available_minutes=40)
+    schedule = scheduler.build_schedule()
+
+    assert [task.title for task in schedule] == ["Long walk"]

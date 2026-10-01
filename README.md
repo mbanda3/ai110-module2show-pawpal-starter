@@ -123,19 +123,34 @@ Run the tests with:
 python -m pytest
 ```
 
-The initial test suite checks:
+The test suite (`tests/test_pawpal.py`, 12 tests) covers:
 
-* Whether `mark_complete()` correctly changes a task's completion status
-* Whether adding a task to a pet increases the pet's task count
+* **Core task/pet behavior** — `mark_complete()` changes a task's completion status; adding a task increases a pet's task count.
+* **Sorting correctness** — `Scheduler.sort_by_time()` returns tasks in chronological order, with tasks that have no preferred time sorted to the end instead of the start.
+* **Filtering** — `Scheduler.filter_tasks()` narrows tasks correctly by pet name and/or completion status.
+* **Recurrence logic** — completing a `"daily"` task schedules a new, incomplete copy due one day later; completing a `"weekly"` task schedules one due seven days later; a one-off task (no recurrence) does not regenerate.
+* **Conflict detection** — `Scheduler.detect_conflicts()` flags two tasks (across different pets) that share the same preferred time, and ignores conflicts where one of the tasks is already completed.
+* **Edge cases** — an owner with no pets, and a pet with no tasks, both produce an empty schedule and no conflicts instead of raising; `build_schedule()` stops adding tasks once the available time budget is used up.
 
 Example successful output:
 
 ```text
 ============================= test session starts =============================
-tests/test_pawpal.py ..                                                     [100%]
+platform win32 -- Python 3.13.13, pytest-9.1.1, pluggy-1.6.0
+rootdir: C:\CodePath_Stuff\ai110-module2show-pawpal-starter
+plugins: anyio-4.15.1
+collected 12 items
 
-============================== 2 passed in ...s ==============================
+tests\test_pawpal.py ............                                        [100%]
+
+============================= 12 passed in 0.07s ==============================
 ```
+
+### Confidence Level
+
+⭐⭐⭐⭐☆ (4/5)
+
+The core logic — task completion, sorting, filtering, recurrence, and conflict detection — is well covered and passes consistently, including the edge cases (no pets, no tasks, tight time budgets) called out in `reflection.md`. I'm holding back one star because `detect_conflicts()` is an intentionally simplified exact-time-match check rather than true overlapping-duration detection (see `reflection.md`, section 2b), so it's not tested against that more thorough behavior since the behavior itself doesn't exist yet.
 
 ## 📐 Smarter Scheduling
 
