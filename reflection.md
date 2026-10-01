@@ -63,27 +63,36 @@ I decided to keep the ID approach because it was simpler for this project. I als
 
 This was useful because it reminded me that AI-generated code still needs to be checked by the person building the project.
 
+### c. AI strategy across phases
+
+The AI coding assistant feature I relied on most was its chat, used for design discussion and code review rather than one-shot generation. Asking it to review a skeleton or explain a tradeoff (like how `Scheduler` should reach an owner's tasks, or whether `detect_conflicts()` should check exact times or overlapping durations) produced more useful results than asking it to "build the feature," because it forced me to read and evaluate an explanation instead of just accepting a diff.
+
+A second suggestion I modified rather than accepted outright came up while implementing `detect_conflicts()`. The AI's first version converted every task into a start/end time range and checked all pairs for overlap, which is the more "correct" approach. I simplified it down to an exact `preferred_time` match instead, documented in section 2b, because the interval-overlap version was harder to reason about and test for a feature whose main job, for this project, is catching the obvious case of two tasks booked at the same moment.
+
+Splitting the work into separate chat sessions per phase (design/skeleton, backend implementation, testing, documentation/UI polish) helped more than I expected. Each chat stayed focused on one kind of question, so earlier design decisions (like the ID-based relationships) didn't get silently re-litigated or overridden while I was deep in an unrelated phase like writing tests or wiring up the Streamlit UI.
+
 ---
 
 ## 4. Testing and Verification
 
 ### a. What I tested
 
-I created tests for two basic behaviors.
+The suite in `tests/test_pawpal.py` grew to 12 tests covering the core behaviors and the smarter-scheduling features added in Phase 3:
 
-First, I tested that calling `mark_complete()` changes a task's `completed` value from `False` to `True`.
+* Basic task/pet behavior: `mark_complete()` flips a task's `completed` status, and adding a task increases a pet's task count.
+* Sorting correctness: `Scheduler.sort_by_time()` returns tasks earliest-first, with no-preferred-time tasks pushed to the end instead of the start.
+* Filtering: `Scheduler.filter_tasks()` narrows tasks by pet name and/or completion status, independently or together.
+* Recurrence logic: completing a `"daily"` task schedules a new copy due one day later, completing a `"weekly"` task schedules one due seven days later, and a one-off task does not regenerate.
+* Conflict detection: two tasks sharing a preferred time (across different pets) are flagged, and a conflict involving an already-completed task is correctly ignored.
+* Edge cases: an owner with no pets, a pet with no tasks, and a time budget too small to fit every task all produce the right empty/partial result instead of raising an error.
 
-Second, I tested that adding a task to a pet increases the number of tasks associated with that pet.
-
-These tests are important because they check two of the basic behaviors that the rest of the application depends on. If tasks cannot be completed or added correctly, the scheduler would not have reliable information to work with.
+These matter because they check the behaviors the rest of the app depends on: if tasks can't be reliably completed, sorted, or checked for conflicts, the schedule the `Scheduler` builds can't be trusted either.
 
 ### b. Confidence
 
-I expect the basic functionality to work because the classes have relatively simple responsibilities, but I would still verify everything by running the CLI program and the automated tests.
+My confidence in this suite is high for the behaviors it directly tests — sorting, filtering, recurrence, and the "obvious" conflict case are all exercised with both happy-path and edge-case inputs, and all 12 tests pass consistently (see the README's "Testing PawPal+" section for the actual `pytest` run).
 
-There are also several edge cases that I would test if I had more time. For example, I would test an owner with no pets, a pet with no tasks, multiple tasks with the same preferred time, tasks that are longer than the available time, and tasks with no preferred time.
-
-I would also add more tests once the scheduling algorithms for recurring tasks and conflict detection are implemented.
+The one place I'd stay cautious is `detect_conflicts()`: it is an intentionally simplified exact-time-match check rather than true overlapping-duration detection (see section 2b), so the tests confirm it does what it's designed to do, not that it catches every real-world double-booking.
 
 ---
 
@@ -97,9 +106,9 @@ I also like the idea of testing the backend through the CLI before focusing on t
 
 ### b. What I would improve
 
-If I had another iteration, I would improve the scheduling algorithm. The current version is intentionally simple, and there are several ways it could become more useful. For example, it could detect conflicting tasks, handle recurring tasks, and provide more detailed scheduling decisions.
+Conflict detection and recurring tasks are implemented now, but both still have room to grow. `detect_conflicts()` only catches exact `preferred_time` matches rather than true overlapping-duration conflicts (section 2b), and `build_schedule()` fills the available time greedily rather than searching for the combination of tasks that uses it best.
 
-I would also consider adding more persistent storage so that pets and tasks are not lost when the application is restarted.
+I would also add persistent storage so that pets and tasks survive restarting the Streamlit app instead of living only in `st.session_state` for the duration of a browser session.
 
 ### c. Key takeaway
 

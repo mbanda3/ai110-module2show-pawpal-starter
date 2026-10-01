@@ -1,0 +1,64 @@
+classDiagram
+    %% PawPal+ final UML — reflects pawpal_system.py as implemented in Phase 3.
+
+    class Owner {
+        +str owner_id
+        +str name
+        +dict preferences
+        +List~Pet~ pets
+        +add_pet(pet) void
+        +remove_pet(pet_id) void
+        +get_pets() List~Pet~
+        +get_all_tasks() List~Task~
+    }
+
+    class Pet {
+        +str pet_id
+        +str name
+        +str species
+        +str breed
+        +str owner_id
+        +List~Task~ tasks
+        +add_task(task) void
+        +remove_task(task_id) void
+        +get_tasks() List~Task~
+        +mark_task_complete(task_id) Task
+    }
+
+    class Task {
+        +str task_id
+        +str title
+        +int duration_minutes
+        +Priority priority
+        +str pet_id
+        +time preferred_time
+        +bool completed
+        +str recurrence
+        +date due_date
+        +mark_complete() void
+        +mark_incomplete() void
+        +create_next_occurrence() Task
+    }
+
+    class Scheduler {
+        +Owner owner
+        +int available_minutes
+        +sort_by_time(tasks)$ List~Task~
+        +filter_tasks(pet_name, completed) List~Task~
+        +detect_conflicts() List~str~
+        +build_schedule() List~Task~
+        +explain_plan(schedule) str
+    }
+
+    class Priority {
+        <<enumeration>>
+        LOW
+        MEDIUM
+        HIGH
+    }
+
+    Owner "1" --> "many" Pet : owns
+    Pet "1" --> "many" Task : has
+    Scheduler --> Owner : reads tasks from (owner.get_all_tasks)
+    Task --> Priority : uses
+    Task --> Task : create_next_occurrence() produces next

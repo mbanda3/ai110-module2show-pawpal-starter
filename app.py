@@ -100,12 +100,60 @@ else:
     st.info("Add a pet first before adding tasks.")
 
 if owner.get_all_tasks():
-    st.write("Current tasks:")
+    scheduler = Scheduler(owner=owner)
+    pet_names = {pet.pet_id: pet.name for pet in owner.get_pets()}
+
+    st.markdown("**Filter tasks**")
+    filter_col1, filter_col2 = st.columns(2)
+    with filter_col1:
+        pet_filter_options = ["All pets"] + [pet.name for pet in owner.get_pets()]
+        pet_filter = st.selectbox("Pet", pet_filter_options, key="task_filter_pet")
+    with filter_col2:
+        status_filter = st.selectbox("Status", ["All", "Incomplete", "Completed"], key="task_filter_status")
+
+    filtered_tasks = scheduler.filter_tasks(
+        pet_name=None if pet_filter == "All pets" else pet_filter,
+        completed=None if status_filter == "All" else status_filter == "Completed",
+    )
+    # Sorted by preferred time so the table reads like an actual daily agenda.
+    sorted_tasks = scheduler.sort_by_time(filtered_tasks)
+
+    if sorted_tasks:
+        st.table(
+            [
+                {
+                    "Pet": pet_names.get(task.pet_id, "Unknown"),
+                    "Task": task.title,
+                    "Time": task.preferred_time.strftime("%H:%M") if task.preferred_time else "Anytime",
+                    "Duration (min)": task.duration_minutes,
+                    "Priority": task.priority.name,
+                    "Repeats": task.recurrence or "—",
+                    "Status": "✅ Done" if task.completed else "⏳ Pending",
+                }
+                for task in sorted_tasks
+            ]
+        )
+    else:
+        st.info("No tasks match this filter.")
+
+    # Conflicts are surfaced here, right next to the task list, so an owner
+    # notices a double-booking while editing tasks instead of only finding
+    # out after clicking "Generate schedule".
+    conflicts = scheduler.detect_conflicts()
+    if conflicts:
+        st.warning(f"⚠️ {len(conflicts)} scheduling conflict(s) detected:")
+        for warning in conflicts:
+            st.warning(warning)
+    else:
+        st.success("No scheduling conflicts detected.")
+
+    st.markdown("**Mark tasks complete**")
     for pet in owner.get_pets():
-        if not pet.get_tasks():
+        pet_tasks = scheduler.sort_by_time(pet.get_tasks())
+        if not pet_tasks:
             continue
-        st.markdown(f"**{pet.name}**")
-        for task in pet.get_tasks():
+        st.markdown(f"_{pet.name}_")
+        for task in pet_tasks:
             label_col, done_col = st.columns([4, 1])
             with label_col:
                 label = f"{task.title} — {task.duration_minutes} min, {task.priority.name}"
@@ -133,7 +181,32 @@ available_minutes = st.number_input(
 if st.button("Generate schedule"):
     scheduler = Scheduler(owner=owner, available_minutes=int(available_minutes))
     schedule = scheduler.build_schedule()
-    st.code(scheduler.explain_plan(schedule))
+    pet_names = {pet.pet_id: pet.name for pet in owner.get_pets()}
 
-    for warning in scheduler.detect_conflicts():
-        st.warning(warning)
+    if schedule:
+        total_minutes = sum(task.duration_minutes for task in schedule)
+        st.success(
+            f"Scheduled {len(schedule)} task(s) — {total_minutes}/{int(available_minutes)} minutes used."
+        )
+        st.table(
+            [
+                {
+                    "Time": task.preferred_time.strftime("%H:%M") if task.preferred_time else "Anytime",
+                    "Task": task.title,
+                    "Pet": pet_names.get(task.pet_id, "Unknown"),
+                    "Duration (min)": task.duration_minutes,
+                    "Priority": task.priority.name,
+                }
+                for task in schedule
+            ]
+        )
+        with st.expander("Full explanation"):
+            st.code(scheduler.explain_plan(schedule))
+    else:
+        st.info("No tasks were scheduled.")
+
+    conflicts = scheduler.detect_conflicts()
+    if conflicts:
+        st.warning("Heads up — some of today's tasks share the same preferred time:")
+        for warning in conflicts:
+            st.warning(warning)
